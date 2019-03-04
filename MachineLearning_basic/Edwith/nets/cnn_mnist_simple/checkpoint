@@ -1,0 +1,4 @@
+model_checkpoint_path: "net-20.ckpt"
+all_model_checkpoint_paths: "net-12.ckpt"
+all_model_checkpoint_paths: "net-16.ckpt"
+all_model_checkpoint_paths: "net-20.ckpt"
