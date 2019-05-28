@@ -23,12 +23,12 @@ sudo sh docker.sh
 
 * 지도 학습은 라벨이 존재하는 데이터 셋 {(X,y)}에 대해서 X 데이터를 y 라벨로 매핑시키는 모델을 학습하는 것을 의미하며,
 
-* 비지도 학습은 {X} 자체에 있는 패턴을 찾아내는 데에 목적을 둔 방법이다.
+* 비지도 학습은 {X} 자체가 가지고 있을 패턴을 찾아내는 데에 목적을 둔 방법이다.
 
 또 지도학습은, 라벨 y의 형태에 따라, regression과 classification으로 나눌 수 있으며, 다음과 같이 크게 나눈다.
 1. regression (some number)
 2. Binary Classification (1 or 0)
-3. Multivariable Classification (A, B, C, D, E, etc)
+3. Multi-class Classification (A, B, C, D, E, etc)
 
 ## II. Linear Regression
 선형회귀 모델은 가장 단순하지만, 이 모델을 통해 ML을 관통하는 핵심적인 개념을 습득할 수 있다.
@@ -182,25 +182,91 @@ plt.show()
 
 
 
+
+
 ## III. Logistic Regression
 
+Logistic Regressoin은 쉽게 설명해 Linear Regression model에서 나온 결과를 Sigmoid라는 함수를 통과시켜 얻은 값을 통해, 분류를 하는 모델이다.
+$$
+\begin{align}
+Logistic Regression(x) &= \sigma(Linear Regression(x))\\
+&= \sigma(XW+b)
+\end{align}
+$$
+**Sigmoid 함수**
+$$
+\sigma(x) = \dfrac{1}{1-e^{-x}}
+$$
+x값이 0일 때는 0.5이며, 무한히 커질때는 1이 되고, 무한이 작아질때는, 0이 되는 **미분가능**한 함수이다.
+
+이 형태 외에도, tanh(x) 등의 함수도 사용될 수 있다.
+
+
+
+0에서 1사이의 값을 가지기 때문에, 확률로 취급할 수 있다.
+
+
+
+Binary Classification의 두 라벨을 하나는 1 하나는 0이라고 할 때, 위의 Logistic Regression 모델을 이용해 분류할 수 있다.
+
+
+
+위 모델을 학습시키기 위해서는, 적절한 형태의 비용함수 (Cost Function)가 필요하다. 
+$$
+Cost(x) = -\dfrac{1}{m}\Sigma_i^m[y_ilog(RL(x_i))+(1-y_i)log(1-RL(x_i))]
+$$
+Likelihood
+$$
+P(Y|X)P(X) = P(X|Y)P(Y)\\
+P(Y|X) = \dfrac{P(X|Y)P(Y)}{P(X)}\\
+P(Y|X) \approx P(X|Y)P(Y)
+$$
+Log-likelihood
+$$
+\begin{align}
+
+max[log(P(Y|X))]&=max[log(P(X|Y)P(Y))]\\
+\\
+max[log(P(X|Y)P(Y))]&= max[\Sigma_{i} log(P(X|Y=y_i)P(Y=y_i))] \\
+& \approx max[\Sigma_{i} log(P(X|Y=y_i)] \\
+\end{align}
+$$
+
+For the binary class
+$$
+\begin{align}
+\\
+max[\Sigma_{i} log(P(X|Y=y_i)] &= max[log(P(X|Y=0)) + log(P(X|Y=1))]\\
+&=max[log()] \\
+log(P(X|Y)P(Y)) &= log(P(X|Y))+log(P(Y))\\
+&= log(\dfrac{1}{1+e^{-wx}})+log(y)\\
+\end{align}
+$$
+To get first derivative of the log-likelihood for maximum value.
+$$
+\begin{align}
+\dfrac{\partial}{\partial W}[log(\dfrac{1}{1+e^{-Wx+b}})+log(y)]&= \dfrac{e^{-Wx+b}}{(1+e^{-Wx+b})}
+\end{align}
+$$
+
+
+
+
+
+Logistic Regression in TensorFlow
 
 
 
 
 
 
-## IV. Tensorflow
-
-#### i . Basics
 
 
 
 
 
 
-
-#### ii. Practices
+## IV. Tensorflow Basics
 
 
 
@@ -208,7 +274,12 @@ plt.show()
 
 
 
-## V. TensorBoard
+
+
+
+
+
+## V. Basic Deep learing
 
 
 
@@ -216,7 +287,13 @@ plt.show()
 
 
 
-## VI. Keras in Tensorflow
+
+
+
+
+
+
+## VI. TensorBoard
 
 
 
@@ -224,13 +301,29 @@ plt.show()
 
 
 
-## VII. CNN Basics
+
+
+## VII. Keras in Tensorflow
 
 
 
 
 
-## VIII. CNN model for MNIST dataset
+
+
+
+
+## VIII. CNN Basics
+
+
+
+
+
+
+
+
+
+## IX. CNN model for MNIST dataset
 
 
 
@@ -244,13 +337,23 @@ plt.show()
 
 
 
-## IX. Representative CNN-based models and its applications
+
+
+
+
+## X. Representative CNN-based models and its applications
 
 
 
 
 
-## X. RNN basics
+
+
+
+
+
+
+## XI. RNN basics
 
 #### i. concept
 
