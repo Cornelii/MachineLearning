@@ -103,7 +103,7 @@ $$
 
 
 
-Linear Regression by Tensorflow
+#### iii. Linear Regression by Tensorflow
 
 ```python
 import tensorflow as tf
@@ -182,8 +182,6 @@ plt.show()
 
 
 
-
-
 ## III. Logistic Regression
 
 Logistic Regressoin은 쉽게 설명해 Linear Regression model에서 나온 결과를 Sigmoid라는 함수를 통과시켜 얻은 값을 통해, 분류를 하는 모델이다.
@@ -193,7 +191,8 @@ Logistic Regression(x) &= \sigma(Linear Regression(x))\\
 &= \sigma(XW+b)
 \end{align}
 $$
-**Sigmoid 함수**
+#### i. Sigmoid 함수
+
 $$
 \sigma(x) = \dfrac{1}{1-e^{-x}}
 $$
@@ -211,66 +210,364 @@ Binary Classification의 두 라벨을 하나는 1 하나는 0이라고 할 때,
 
 
 
+#### ii. CostFunction for Logistic Regression
+
 위 모델을 학습시키기 위해서는, 적절한 형태의 비용함수 (Cost Function)가 필요하다. 
 $$
 Cost(x) = -\dfrac{1}{m}\Sigma_i^m[y_ilog(RL(x_i))+(1-y_i)log(1-RL(x_i))]
 $$
-Likelihood
-$$
-P(Y|X)P(X) = P(X|Y)P(Y)\\
-P(Y|X) = \dfrac{P(X|Y)P(Y)}{P(X)}\\
-P(Y|X) \approx P(X|Y)P(Y)
-$$
-Log-likelihood
+
+
+**Likelihood**
+
+데이터가 주어질 때, 해당 클래스로 결정될 확률.
 $$
 \begin{align}
-
-max[log(P(Y|X))]&=max[log(P(X|Y)P(Y))]\\
+P(Y|X;\theta) &= \prod_i^NP(y_i|x_i;\theta)
+\end{align}
 \\
-max[log(P(X|Y)P(Y))]&= max[\Sigma_{i} log(P(X|Y=y_i)P(Y=y_i))] \\
-& \approx max[\Sigma_{i} log(P(X|Y=y_i)] \\
+\text{i: data point}
+$$
+
+
+
+
+**In the case of binary-class under IID condition(Independent and identically distributed)** 
+$$
+\begin{align}
+P(Y|X;\theta) &= \prod_i^NP(y_i|x_i;\theta)\\
+
+&= \prod_i^N 
+\begin{cases} 
+P(y_i|x_i)\text{ when } y_i=1 \\ 
+1-P(y_i|x_i)\text{ when } y_i=0
+\end{cases}  \\
+&=\prod_i^N P(y_i|x_i)^{y_i}(1-P(y_i|x_i))^{1-y_i}
 \end{align}
 $$
 
-For the binary class
+
+**Log-Likelihood**
 $$
 \begin{align}
+logP(Y|X;\theta)&=log\prod_i^N P(y_i|x_i)^{y_i}(1-P(y_i|x_i))^{1-y_i}\\
+&= \sum_i^N \Big( y_ilogP(y_i|x_i)+(1-y_i)log(1-P(y_i|x_i)) \Big)
+\end{align}
+$$
+
+**And,**
+$$
+\begin{align}
+\text{max }logP(Y|X;\theta) = \text{min }-logP(Y|X;\theta)\\ \\
+\text{Since }P(y_i|x_i) = \sigma(W*X) \text{ in Logistic Regression model,}\\
+\text{The cost function above is spontaneously derived on a way of maximizing Log-Likelihood}
+\end{align}
+$$
+
+
+#### iii. Classification by Logistic Regression
+
+위에서 언급했듯이 Sigmoid 함수를 통과한 값은 0과 1 사이에 들어가게 됨으로, 확률로써 취급될 수 있고, 0.5보다 크면 1, 더 작으면 0인 클래스로 분류할 수 있다.
+
+
+
+사실 이는 Sigmoid 함수를 통과하기 전 선형변환 값이 0보다 큰 경우와 같다.
+$$
+\begin{align}
+\dfrac{1}{1+e^{-x}} &> 0.5\\
+1+e^{-x} &> 2\\
+e^{-x} &> 1\\
+x &> 0\\
+\end{align}
+$$
+
+
+#### iv. Remarks in Implementation
+
+log함수는 0에 가까울 때, 발산하게 된다.
+
+그리고 지수함수는  급격히 증가하는 함수이다.
+
+이 두가지 요소가 계산에 있어서 overflow를 발생하기 쉽게 한다. 그래서 위의 비용함수를 아래와 같이 정리할 수 있다.
+
+
+$$
+\begin{align}
+Cost(x) &= -\dfrac{1}{m}\Sigma_i^m[y_ilog(RL(x_i))+(1-y_i)log(1-RL(x_i))]\\
+-y_ilog(RL(x_i))+(1-y_i)log(1-RL(x_i)) 
+&=
+-y_ilog(\dfrac{1}{1+e^{-WX}})-(1-y_i)log(1-\dfrac{1}{1+e^{-WX}}) \\
 \\
-max[\Sigma_{i} log(P(X|Y=y_i)] &= max[log(P(X|Y=0)) + log(P(X|Y=1))]\\
-&=max[log()] \\
-log(P(X|Y)P(Y)) &= log(P(X|Y))+log(P(Y))\\
-&= log(\dfrac{1}{1+e^{-wx}})+log(y)\\
+\text{let WX = m,}\\
+&=-y_ilog(\dfrac{1}{1+e^{-m}})-(1-y_i)log(\dfrac{e^{-m}}{1+e^{-m}}) \\
+&=y_ilog(1+e^{-m})+(1-y_i)(log(1+e^{-m})-log(e^{-m})) \\
+&=m-y_i*m  +log(1+e^{-m}) \\
+\\
+\\
+\text{applying } +log(e^{m})-log(e^{m}) \text{ on the RHS}
+\\
+m-y_i*m  +log(1+e^{-m}) &= m-y_i*m  +log(1+e^{-m})+log(e^{m})-log(e^{m})\\
+&= -y_i*m +log(1+e^m)
+\\
 \end{align}
 $$
-To get first derivative of the log-likelihood for maximum value.
+
+
+**If we use above eqs when m>=0 and below one when m<0, it can be expressed to a single eqs.**
+
+
+
+
 $$
-\begin{align}
-\dfrac{\partial}{\partial W}[log(\dfrac{1}{1+e^{-Wx+b}})+log(y)]&= \dfrac{e^{-Wx+b}}{(1+e^{-Wx+b})}
-\end{align}
+max(m,0)-y_i*m+log(1+e^{-abs(m)})
 $$
+**This equation is safe from overflow!!!**
 
 
 
+#### iv. Logistic Regression in TensorFlow
+
+```python
+import tensorflow as tf
+import numpy as np
+import sklearn
+from sklearn.datasets import load_breast_cancer
+
+# load data
+train_data = load_breast_cancer()
+x_train = train_data.data
+y_train = train_data.target
+y_train = np.reshape(y_train, [-1,1])
+print("shape of data features: {}".format(x_train.shape))
+print("shape of data labels: {}".format(y_train.shape))
 
 
-Logistic Regression in TensorFlow
+# Model
+# tensorflow model using gradientTape with low API
+
+X = tf.placeholder(tf.float32, shape=[None,30])
+Y = tf.placeholder(tf.float32, shape=[None,1])
+
+w = tf.Variable(tf.random.normal([30,1],0,1))
+b = tf.Variable(tf.zeros([1]))
+
+linear_model = tf.matmul(X, w) + b
+
+# Define Cost Function
+##cost = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=Y, logits=linear_model))
+cost = tf.reduce_mean(tf.maximum(linear_model,0)-linear_model*Y + tf.log(1+tf.exp(-tf.abs(linear_model))))
+
+
+# HyperParameters
+learning_rate = 0.0001
+iter_num = 2000
+
+optm = tf.train.GradientDescentOptimizer(learning_rate=0.001).minimize(cost)
+predict = tf.cast(linear_model > 0, dtype=tf.float32)
+acc = tf.reduce_mean(tf.cast(tf.equal(predict, Y), dtype=tf.float32))
+
+
+# training
+init = tf.global_variables_initializer()
+with tf.Session() as sess:
+    sess.run(init)
+    cost_list = []
+    acc_list = []
+    for idx in range(iter_num):
+        sess.run(optm,feed_dict={X:x_train, Y:y_train})
+        
+        if idx%100:
+            pass
+        else:
+            tmp_cost, tmp_acc = sess.run([cost, acc], feed_dict={X:x_train, Y:y_train})
+            cost_list.append(tmp_cost)
+            acc_list.append(tmp_acc)
+            print("# {}th iteration:".format(idx+1))
+            print("cost : {}, accuracy: {:2f}%\n".format(tmp_cost, tmp_acc))
+    print("iteraion has done!")
+```
+
+![](./imgs/logisticRegression.png)
+
+breast-cancer data를 logistic regression을 활용해서 학습시켜보았다.
+
+마지막에 정확도가 90%정도 나온 것을 볼 수 있다. 
+
+- 정확도 metric으로만 판단할 수는 없다.
+- Exploratory Data Analysis (EDA)를 통해 데이터의 분포와 특성을 파악한 뒤 적절한 metric을 통해 확인하여야 한다.
 
 
 
+## IV. Tensorflow
 
 
 
+[description regarding tensorflow]
 
 
 
+#### I. Tensorflow Basics
+
+Core Procedure in TensorFlow
+
+1. **tf.Graph**
+2. **tf.Session**
+
+#### i. tf.Graph
+
+This is computational Graph that consists of *operations*(Nodes) and *Tensors*(Edges).
 
 
 
-## IV. Tensorflow Basics
+##### TensorBoard
+
+Utility to visualize the graph.
 
 
 
+Use of graph
 
+```python
+writer = tf.summary.FileWriter('.')
+writer.add_graph(tf.get_default_graph())
+writer.flush()
+```
+
+
+
+#### ii. tf.Session
+
+When you request the output of a node with `Session.run` TensorFlow backtracks through the graph and runs all the nodes that provide input to the requested output node.
+
+
+
+##### 1. Feeding
+
+`tf.Graph` can be parameterized using `tf.placeholder`, and `feed_dict` argument in `sess.run()`
+
+
+
+##### 2. Datasets
+
+`tf.placeholder` works for simple experiments.
+
+`tf.data` are preferred method to stream data into a model.
+
+
+
+To get `tf.Tensor` from a Dataset.
+
+1. convert data to `tf.data.Iterator`
+2. then, call `tf.data.Iterator.get_next()`
+
+example
+
+```python
+train_data = #...
+
+slices = tf.data.Dataset.from_tensor_slices(train_data)
+next_item = slices.make_one_shot_iterator().get_next() # get a row at train_data
+# .make_ont_shot_iterator() returns tf.data.Iterator
+with tf.Session() as sess:
+    while True:
+        try:
+            print(sess.run(next_item))
+        except: tf.errors.OutOfRangeError
+            break
+
+```
+
+If it reaches end of the data, it throws `tf.errors.OutOfRangeError`
+
+
+
+If Dataset depends on stateful operation like `tf.random.normal()`, it must be initialized as follows.
+
+```python
+r = tf.random.normal([10,3])
+dataset = tf.data.Dataset.from_tensor_slices(r)
+iterator = dataset.make_initializable_iterator()
+next_row = iterator.get_next()
+
+sess.run(iterator.initializer)
+while True:
+  try:
+    print(sess.run(next_row))
+  except tf.errors.OutOfRangeError:
+    break
+```
+
+
+
+See Importing Data
+
+[High level API importing data](<https://www.tensorflow.org/guide/datasets>)
+
+##### 3. Layers (`tf.layers`)
+
+Layer is predefined combination with sorts of operation and variables
+
+
+
+example
+
+```python
+x = tf.placeholder(tf.float32, shape=[None, 3])
+linear_model = tf.layers.Dense(units=1)
+y = linear_model(x)
+```
+
+**Remarks**
+
+1. Function, whose name starts with capital (class), returns callable `?!` 
+
+2. Variables in layer must be initialized as follows
+
+```python
+init = tf.global_variables_initializer()
+sess.run(init)
+```
+
+
+
+##### 4. Layer Function shortcuts
+
+For each layer class, tf also provides a shortcut function that can be run in a single call.
+
+```python
+x = tf.placeholder(tf.float32, shape=[None, 3])
+y = tf.layers.dense(x, units=1)
+
+init = tf.global_variables_initializer()
+sess.run(init)
+
+print(sess.run(y, {x: [[1, 2, 3], [4, 5, 6]]}))
+```
+
+While convenient, this approach allows no access to the [`tf.layers.Layer`](https://www.tensorflow.org/api_docs/python/tf/layers/Layer) object. This makes introspection and debugging more difficult, and layer reuse impossible.
+
+
+
+##### 5. Loss (`tf.losses`)
+
+`tf.losses` module provides several common loss functions.
+
+```python
+loss1 = tf.losses.mean_squared_error(labels= , predictions= )
+loss2 = #...
+```
+
+
+
+##### 6. Training
+
+1. make Optimizer (`tf.train.Optimizer`)  `tf.train.GradientDescentOptimizer`
+2. `.minimize({loss})`
+
+```python
+optimizer = tf.train.GradientDescentOptimizer(0.01)
+train = optimizer.minimize(loss)
+```
 
 
 
