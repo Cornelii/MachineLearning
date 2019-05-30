@@ -571,6 +571,306 @@ train = optimizer.minimize(loss)
 
 
 
+#### iii. Tensors
+
+`tf.Tensor` is a basic object of tensorflow
+
+
+
+`tf.Tensor`'s properties
+
+- data type (`tf.float32`, `tf.int32`, `string`, etc)
+- shape
+
+
+
+Kinds of `tf.Tensor`
+
+- `tf.Variable`: only **mutable** `tf.Tensor`
+- `tf.constant`
+- `tf.placeholder`
+- `tf.SparseTensor`
+
+
+
+example of making `tf.Variable`
+
+```python
+var1 = tf.Variable(61.3, tf.float64)
+var2 = tf.Variable([6, 4], tf.int32)
+var3 = tf.Variable(4.7 - 3.7j, tf.complex64)
+
+# to get rank
+r = tf.rank(var2)
+
+# get zero tensor
+zero_t = tf.zeros([<shape>])
+
+one_t = tf.ones([<shape>])
+
+# reshape tensor
+
+var4 = tf.reshape(var2, [2,-1]) # -1 => kind of None in numpy automatically set
+
+
+# to change datatype, use tf.cast
+var5 = tf.cast(var2, dtype=tf.float32)
+```
+
+
+
+#### iv. Variables@@
+
+##### 1. To create a variable
+
+- `tf.get_variable()`
+- `tf.Variable()`
+
+
+
+example
+
+```python
+my_int_variable = tf.get_variable("my_int_variable", [1, 2, 3], dtype=tf.int32,
+  initializer=tf.zeros_initializer)
+# dtype default: tf.float32, initializer default: tf.glorot_uniform_initializer
+# other initializer => tf.zeros_initializer,
+# for the initializer, tf.Tensor also can be used, in this case, No it requires shape.
+```
+
+
+
+##### 2. Variable Collections
+
+Defaultly, every `tf.Varialbe` are placed in the following two collections
+
+- `tf.GraphKeys.GLOBAL_VARIABLES`     variables that can be shared across multiple devices.
+- `tf.GraphKeys.TRAINABLE_VARIABLES`    variables for which tf will calculate gradients
+
+
+
+**Remarks**: If you do not want a variable to be trained, add it to `tf.GraphKeys.LOCAL_VARIABLES`
+
+example
+
+```python
+non_trained_local_var = tf.get_variable('local', shape=(), collections=[tf.GraphKeys.LOCAL_VARIABLES])
+```
+
+or, `trainable=False` alternatively
+
+```python
+non_trained_local_var = tf.get_variable('local', shape=(), trainable=False)
+```
+
+
+
+#####  3. Custom Collection
+
+ there is no need to explicitly create a collection.
+
+example
+
+```python
+tf.add_to_collection('my_collection', non_trained_local_var)
+```
+
+
+
+##### 4. Retreive variables from collections
+
+example
+
+```python
+tf.get_collection('my_collection') #available for other default collection as well.
+```
+
+
+
+
+
+##### 5. Variable-related operations
+
+- **Device placement**
+
+Like other tensorflow operation(node in tf.Graph), you can put variables on particular devices as follows.
+
+```python
+with tf.device('/device:GPU:1'):
+    v = tf.get_variable('v', [1])
+```
+
+When you run parameter sever, refer `tf.train.replica_device_setter`
+
+
+
+- **Initializing variables**
+
+tf.Variables must be initialized.
+
+1. To initialize all trainable variables. `tf.global_variables_initializer()` 
+2. To initialize variables yourself. `sess.run(my_variable.initializer)`
+
+
+
+**Remarks I**. To check whether non-initialized variables exiests,
+
+`print(sess.run(tf.report_uninitialized_variables()))`
+
+
+
+**Remarks II**. Note that by default [`tf.global_variables_initializer`](https://www.tensorflow.org/api_docs/python/tf/initializers/global_variables) does not specify the order in which variables are initialized. Therefore, if the initial value of a variable depends on another variable's value, it's likely that you'll get an error. 
+
+To resolve this.
+
+```python
+v = tf.get_variable("v", shape=(), initializer=tf.zeros_initializer())
+w = tf.get_variable("w", initializer=v.initialized_value() + 1)
+#use of .initialized_value()
+```
+
+
+
+- **Assignment**
+
+use of `assign`, `assign_add`, etc.
+
+
+
+##### <span style="color:blue; font-size:20px;">Sharing Variables</span>
+
+`tf.variable_scope`
+
+
+
+example
+
+```python
+# function to generate some layer.
+def conv_relu(input, kernel_shape, bias_shape):
+    # Create variable named "weights".
+    weights = tf.get_variable("weights", kernel_shape,
+        initializer=tf.random_normal_initializer())
+    # Create variable named "biases".
+    biases = tf.get_variable("biases", bias_shape,
+        initializer=tf.constant_initializer(0.0))
+    conv = tf.nn.conv2d(input, weights,
+        strides=[1, 1, 1, 1], padding='SAME')
+    return tf.nn.relu(conv + biases)
+
+
+input1 = tf.random_normal([1,10,10,32])
+input2 = tf.random_normal([1,20,20,32])
+x = conv_relu(input1, kernel_shape=[5, 5, 32, 32], bias_shape=[32])
+x = conv_relu(x, kernel_shape=[5, 5, 32, 32], bias_shape = [32])  # This fails.
+# This is obscure. Which one do you want?! layer with new variables, or same variables
+# Because names 'weights', 'biases' are defined
+
+# To clarify this problem
+
+## 1. Different variables (new)
+def my_image_filter(input_images):
+    with tf.variable_scope("conv1"):
+        # Variables created here will be named "conv1/weights", "conv1/biases".
+        relu1 = conv_relu(input_images, [5, 5, 32, 32], [32])
+    with tf.variable_scope("conv2"):
+        # Variables created here will be named "conv2/weights", "conv2/biases".
+        return conv_relu(relu1, [5, 5, 32, 32], [32])
+
+# use tf.variable_scope()    to define the named layer in other scope.
+```
+
+**Important**
+
+If you want variables be shared. `reuse=True`
+
+```python
+with tf.variable_scope("model"):
+  output1 = my_image_filter(input1)
+with tf.variable_scope("model", reuse=True):
+  output2 = my_image_filter(input2)
+```
+
+Scope can be set in a hierarchical way.
+
+
+
+
+
+#### v. Graphs and Sessions
+
+`tf.Graph` contains
+
+##### - Graph structure
+
+nodes and edges, but no it does contain all of the useful context
+
+##### - Graph collections
+
+`tf.add_to_collection` with `tf.GraphKeys`  `tf.get_collection`
+
+
+
+
+
+##### 1. Building a `tf.Graph`
+
+TensorFlow provides a **default graph** that is an implicit argument to all API functions in the same context.
+
+
+
+Each API functions create `tf.Operation` (Node), and it returns `tf.Tensor` (Edge)
+
+
+
+##### 2. Naming Operations
+
+ The TensorFlow API provides two ways to override the name of an operation:
+
+- Each API function that creates a new [`tf.Operation`](https://www.tensorflow.org/api_docs/python/tf/Operation) or returns a new [`tf.Tensor`](https://www.tensorflow.org/api_docs/python/tf/Tensor) accepts an optional `name`argument.
+- The [`tf.name_scope`](https://www.tensorflow.org/api_docs/python/tf/name_scope) function makes it possible to add a **name scope** prefix to all operations created in a particular context.
+
+If a name or a name scope is aleady defined, TF automatically append `_1`, `_2`, and so on.
+
+
+
+example
+
+```python
+c_0 = tf.constant(0, name="c")  # => operation named "c"
+
+# Already-used names will be "uniquified".
+c_1 = tf.constant(2, name="c")  # => operation named "c_1"
+
+# Name scopes add a prefix to all operations created in the same context.
+with tf.name_scope("outer"):
+  c_2 = tf.constant(2, name="c")  # => operation named "outer/c"
+
+  # Name scopes nest like paths in a hierarchical file system.
+  with tf.name_scope("inner"):
+    c_3 = tf.constant(3, name="c")  # => operation named "outer/inner/c"
+
+  # Exiting a name scope context will return to the previous prefix.
+  c_4 = tf.constant(4, name="c")  # => operation named "outer/c_1"
+
+  # Already-used name scopes will be "uniquified".
+  with tf.name_scope("inner"):
+    c_5 = tf.constant(5, name="c")  # => operation named "outer/inner_1/c"
+```
+
+
+
+Note that [`tf.Tensor`](https://www.tensorflow.org/api_docs/python/tf/Tensor) objects are implicitly named after the [`tf.Operation`](https://www.tensorflow.org/api_docs/python/tf/Operation) that produces the tensor as output. A tensor name has the form `"<OP_NAME>:<i>"` 
+
+
+
+##### 3. Placing operations on different devices
+
+
+
+
+
+
 
 
 
@@ -663,4 +963,10 @@ train = optimizer.minimize(loss)
 
 
 
+
+
+
+#### XII. Advanced Tensorflow Topics
+
+##### i. Ragged Tensor
 
