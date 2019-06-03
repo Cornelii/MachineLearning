@@ -866,6 +866,165 @@ Note that [`tf.Tensor`](https://www.tensorflow.org/api_docs/python/tf/Tensor) ob
 
 ##### 3. Placing operations on different devices
 
+`/job:<JOB_NAME>/task:<TASK_INDEX/device:<DEVICE_TYPE GPU or CPU>:<DEVICE_INDEX>`
+
+
+
+example
+
+```python
+# Operations created outside either context will run on the "best possible"
+# device. For example, if you have a GPU and a CPU available, and the operation
+# has a GPU implementation, TensorFlow will choose the GPU.
+weights = tf.random_normal(...)
+
+with tf.device("/device:CPU:0"):
+  # Operations created in this context will be pinned to the CPU.
+  img = tf.decode_jpeg(tf.read_file("img.jpg"))
+
+with tf.device("/device:GPU:0"):
+  # Operations created in this context will be pinned to the GPU.
+  result = tf.matmul(weights, img)
+```
+
+
+
+##### 4. Use of `tf.convert_to_tensor`
+
+For
+
+- tf.Tensor
+- tf.Variable
+- numpy.ndarray
+- list
+- pyhton types: float, int, str, bool
+
+TensorFlow will create a new [`tf.Tensor`](https://www.tensorflow.org/api_docs/python/tf/Tensor) each time you use the same tensor-like object. (run out of memory)
+
+Manually, call `tf.convert_to_tensor` on the tensor-like object once, and use returned `tf.Tensor`.
+
+
+
+
+
+##### 5. meta data and option in `tf.Session.run()`
+
+```python
+y = tf.matmul([[37.0, -23.0], [1.0, 4.0]], tf.random_uniform([2, 2]))
+
+with tf.Session() as sess:
+  # Define options for the `sess.run()` call.
+  options = tf.RunOptions()
+  options.output_partition_graphs = True
+  options.trace_level = tf.RunOptions.FULL_TRACE
+
+  # Define a container for the returned metadata.
+  metadata = tf.RunMetadata()
+
+  sess.run(y, options=options, run_metadata=metadata)
+
+  # Print the subgraphs that executed on each device.
+  print(metadata.partition_graphs)
+
+  # Print the timings of each operation that executed.
+  print(metadata.step_stats)
+```
+
+
+
+
+
+##### 6. Visualizing graph
+
+example
+
+```python
+with tf.Session() as sess:
+  # `sess.graph` provides access to the graph used in a <a href="./../api_docs/python/tf/Session"><code>tf.Session</code></a>.
+  writer = tf.summary.FileWriter("/tmp/log/...", sess.graph)
+
+  # Perform your computation...
+  for i in range(1000):
+    sess.run(train_op)
+    # ...
+
+  writer.close()
+```
+
+[TensorBoard guide](<https://www.tensorflow.org/guide/summaries_and_tensorboard>)
+
+
+
+
+
+##### 7. Programming with multiple graphs
+
+example
+
+```python
+g_1 = tf.Graph()
+with g_1.as_default():
+  # Operations created in this scope will be added to `g_1`.
+  c = tf.constant("Node in g_1")
+
+  # Sessions created in this scope will run operations from `g_1`.
+  sess_1 = tf.Session()
+
+g_2 = tf.Graph()
+with g_2.as_default():
+  # Operations created in this scope will be added to `g_2`.
+  d = tf.constant("Node in g_2")
+
+# Alternatively, you can pass a graph when constructing a <a href="./../api_docs/python/tf/Session"><code>tf.Session</code></a>:
+# `sess_2` will run operations from `g_2`.
+sess_2 = tf.Session(graph=g_2)
+
+assert c.graph is g_1
+assert sess_1.graph is g_1
+
+assert d.graph is g_2
+assert sess_2.graph is g_2
+
+g = tf.get_default_graph()
+print(g.get_operations())
+```
+
+
+
+#### vi. Save and Restore
+
+
+
+The `tf.train.Saver` class provides methods to save and restore models.
+
+**Save Variables**
+
+```python
+saver = tf.train.Saver()
+
+with tf.Session() as sess:
+    sess.run(init_op)
+    #...
+    
+    
+    save_path = saver.save(sess, '/tmp/model.ckpt')
+```
+
+**Restore Variables**
+
+```python
+saver = tf.train.Saver()
+
+with tf.Session() as sess:
+    saver.restore(sess, '/tmp/model.ckpt')
+```
+
+
+
+
+
+
+
 
 
 
