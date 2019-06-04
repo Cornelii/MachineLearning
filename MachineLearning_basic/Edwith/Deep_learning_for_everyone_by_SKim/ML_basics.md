@@ -795,6 +795,15 @@ Scope can be set in a hierarchical way.
 
 
 
+## Important
+
+2ways to get trainable variables
+
+* `tf.trainable_variables(scope='<the scope by tf.variable_scope>')`
+* `tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)`
+
+
+
 
 
 #### v. Graphs and Sessions
@@ -1021,6 +1030,31 @@ with tf.Session() as sess:
 
 
 
+#### Selective Saving and Restoring
+
+```python
+v2 = tf.get_variable("v2", [5], initializer = tf.zeros_initializer)
+saver = tf.train.Saver({'v2':v2})
+
+with tf.Sessions() as sess:
+    #...
+    
+    saver.restore(sess, '/tmp/model.ckpt')
+    
+    #...
+```
+
+
+
+**To inspect the variables in a checkpoint, you can use the `inspect_checkpoint`library, particularly the `print_tensors_in_checkpoint_file` function.**
+
+
+
+**By default, `Saver` uses the value of the `tf.Variable.name` property for each variable. However, when you create a `Saver` object, you may optionally choose names for the variables in the checkpoint files.**
+
+
+
+#### vii. checkpoint and savedmodel
 
 
 
@@ -1030,20 +1064,426 @@ with tf.Session() as sess:
 
 
 
+#### viii. High Level APIs
+
+##### 1. Eager Execution
+
+Imperative Programming Environment that evaluates operations immediately without building graphs~!
+
+
+
+```python
+import tensorflow as tf
+tf.enable_eager_execution()
+```
+
+`placeholder` is unavailable in eger-execution mode.
+
+Furthermore, `numpy` operations accept `tf.Tensor`!! in eager-execution mode.
+
+
+
+**Remarks1**
+
+`tf.contrib.eager` module enables use of graph and eager-execution together.
+
+
+
+**Remarks2**
+
+During eager execution, use `tf.GradientTape` to compute gradients later.
+
+```python
+with tf.GradientTape() as tape:
+	loss = #.. define loss
+    
+grad = tape.gradient(loss, w) # for the keras api, keras_model.trainable_variables
+
+#...
+optimizer.apply_gradients(zip(grad, keras_model.trainable_variables) )
+```
+
+
+
+###### object-based saving
+
+`tf.train.Checkpoint`
+
+example
+
+```python
+import os
+import tempfile
+
+model = tf.keras.Sequential([
+  tf.keras.layers.Conv2D(16,[3,3], activation='relu'),
+  tf.keras.layers.GlobalAveragePooling2D(),
+  tf.keras.layers.Dense(10)
+])
+optimizer = tf.train.AdamOptimizer(learning_rate=0.001)
+checkpoint_dir = tempfile.mkdtemp()
+checkpoint_prefix = os.path.join(checkpoint_dir, "ckpt")
+root = tf.train.Checkpoint(optimizer=optimizer,
+                           model=model,
+                           optimizer_step=tf.train.get_or_create_global_step())
+
+root.save(checkpoint_prefix)
+root.restore(tf.train.latest_checkpoint(checkpoint_dir))
+```
+
+
+
+###### TensorBoard
+
+```python
+global_step = tf.train.get_or_create_global_step()
+
+logdir = "./tb/"
+writer = tf.contrib.summary.create_file_writer(logdir)
+writer.set_as_default()
+
+for _ in range(10):
+  global_step.assign_add(1)
+  # Must include a record_summaries method
+  with tf.contrib.summary.record_summaries_every_n_global_steps(100):
+    # your model code goes here
+    tf.contrib.summary.scalar('global_step', global_step)
+```
+
+
+
+###### `tfe.gradients_function` & `Custom gradient`
+
+
+
+##### 2. Importing Data
+
+`tf.data` API
+
+
+
+##### `tf.data.Dataset`
+
+To create dataset:
+
+- `Dataset.from_tensor_slices()` from one or more `tf.Tensor`
+- `Dataset.batch()` from one or more `tf.data.Dataset`
+
+
+
+example
+
+```python
+dataset1 = tf.data.Dataset.from_tensor_slices(tf.random_uniform([4, 10]))
+print(dataset1.output_types)  # ==> "tf.float32"
+print(dataset1.output_shapes)  # ==> "(10,)"
+# tuple can be a parameter at .from_tensor_slices
+```
+
+With giving names (collections.namedtuple or dictionary)
+
+```python
+dataset = tf.data.Dataset.from_tensor_slices(
+   {"a": tf.random_uniform([4]),
+    "b": tf.random_uniform([4, 100], maxval=100, dtype=tf.int32)})
+print(dataset.output_types)  # ==> "{'a': tf.float32, 'b': tf.int32}"
+print(dataset.output_shapes)  # ==> "{'a': (), 'b': (100,)}"
+```
+
+
+
+other methods of Dataset
+
+`.map`, `.flat_map`, `.filter()`
+
+
+
+##### `tf.data.Iterator`
+
+Once you have built a `Dataset` to represent your input data, the next step is to create an `Iterator`
+
+* one-shot: only iterating once through a dataset
+* initializable: this requires you to do `iterator.initializer` (application of placeholder)
+* reinitializable
+* feedable
+
+
+
+**Remarks** at eager_execution mode, we do not need `tf.data.Iterator`. We can get date by simple `for statement`.
+
+
+
+example
+
+**one_shot**
+
+```python
+dataset = tf.data.Dataset.range(100)
+iterator = dataset.make_one_shot_iterator()
+next_element = iterator.get_next()
+
+for i in range(100):
+    value = sess.run(next_element)
+    assert i == value
+```
+
+
+
+**initializable**
+
+```python
+max_value = tf.placeholder(tf.int64, shape=[])
+dataset = tf.data.Dataset.range(max_value)
+iterator = dataset.make_initializable_iterator()
+next_element = iterator.get_next()
+
+# Initialize an iterator over a dataset with 10 elements.
+sess.run(iterator.initializer, feed_dict={max_value: 10})
+for i in range(10):
+  value = sess.run(next_element)
+  assert i == value
+
+# Initialize the same iterator over a dataset with 100 elements.
+sess.run(iterator.initializer, feed_dict={max_value: 100})
+for i in range(100):
+  value = sess.run(next_element)
+  assert i == value
+```
+
+
+
+**reinitializable** (`.from_structure()`)
+
+```python
+# Define training and validation datasets with the same structure.
+training_dataset = tf.data.Dataset.range(100).map(
+    lambda x: x + tf.random_uniform([], -10, 10, tf.int64))
+validation_dataset = tf.data.Dataset.range(50)
+
+
+iterator = tf.data.Iterator.from_structure(training_dataset.output_types,
+                                           training_dataset.output_shapes)
+next_element = iterator.get_next()
+
+training_init_op = iterator.make_initializer(training_dataset)
+validation_init_op = iterator.make_initializer(validation_dataset)
+
+# Run 20 epochs in which the training dataset is traversed, followed by the
+# validation dataset.
+for _ in range(20):
+  # Initialize an iterator over the training dataset.
+  sess.run(training_init_op)
+  for _ in range(100):
+    sess.run(next_element)
+
+  # Initialize an iterator over the validation dataset.
+  sess.run(validation_init_op)
+  for _ in range(50):
+    sess.run(next_element)
+```
+
+
+
+**Batching**
+
+```python
+inc_dataset = tf.data.Dataset.range(100)
+dec_dataset = tf.data.Dataset.range(0, -100, -1)
+dataset = tf.data.Dataset.zip((inc_dataset, dec_dataset))
+batched_dataset = dataset.batch(4)
+
+iterator = batched_dataset.make_one_shot_iterator()
+next_element = iterator.get_next()
+
+print(sess.run(next_element))  # ==> ([0, 1, 2,   3],   [ 0, -1,  -2,  -3])
+print(sess.run(next_element))  # ==> ([4, 5, 6,   7],   [-4, -5,  -6,  -7])
+print(sess.run(next_element))  # ==> ([8, 9, 10, 11],   [-8, -9, -10, -11])
+```
+
+
+
+**Using high-level APIs**
+
+```python
+filenames = ["/var/data/file1.tfrecord", "/var/data/file2.tfrecord"]
+dataset = tf.data.TFRecordDataset(filenames)
+dataset = dataset.map(...)
+dataset = dataset.shuffle(buffer_size=10000)
+dataset = dataset.batch(32)
+dataset = dataset.repeat(num_epochs) #.. automatic initializing for given epochs
+iterator = dataset.make_one_shot_iterator()
+
+next_example, next_label = iterator.get_next()
+loss = model_function(next_example, next_label)
+
+training_op = tf.train.AdagradOptimizer(...).minimize(loss)
+
+with tf.train.MonitoredTrainingSession(...) as sess:
+  while not sess.should_stop():
+    sess.run(training_op)
+```
+
+
+
+##### 3. Accelerators
+
+~~~
+
+~~~
 
 
 
 
 
-## V. Basic Deep learing
+## V. Basic Deep learning
+
+Deep learning is sorts of stacked neural networks with many layers.
+
+This can map extremely nonlinear data. And, it is hiting top in handling atypical data like sound, image, text, etc.
 
 
 
+#### 1. Basic multilayer MNIST hand digit classifier (Use of data pipeline Dataset)
+
+```python
+import tensorflow as tf
+from tensorflow import keras
+from tensorflow.keras.utils import to_categorical
+
+import numpy as np
+import matplotlib.pyplot as plt
+import os
+
+# Hyper parameters
+learning_rate = 0.001
+training_epochs = 21
+batch_size = 100
+
+cur_dir = os.getcwd()
+ckpt_dir_name = 'checkpoints'
+model_dir_name = 'mnist_basic_seq'
+
+checkpoint_dir = os.path.join(cur_dir, ckpt_dir_name, model_dir_name)
+os.makedirs(checkpoint_dir, exist_ok=True)
+
+checkpoint_prefix = os.path.join(checkpoint_dir, model_dir_name)
+
+# mnist data load
+mnist = keras.datasets.mnist
+
+(train_x, train_y), (test_x, test_y) = mnist.load_data()
+
+print(train_x.shape, train_y.shape, test_x.shape, test_y.shape)
+
+# data preprocessing
+train_x = train_x.astype(np.float32) / 255
+test_x = test_x.astype(np.float32) / 255
+
+train_x = np.reshape(train_x, [-1,28*28])
+test_x = np.reshape(test_x, [-1,28*28])
+
+train_y = to_categorical(train_y, 10) ## one-hot encoding
+test_y = to_categorical(test_y,10)
+
+
+# tf.data.Dataset
+
+train_dataset = tf.data.Dataset.from_tensor_slices((train_x, train_y)).shuffle(buffer_size=70000).batch(batch_size)
+test_dataset = tf.data.Dataset.from_tensor_slices((test_x, test_y)).batch(batch_size)
+
+print(train_x.shape, train_y.shape, test_x.shape, test_y.shape)
+
+# placeholder & models (Simple double layer perceptrons)
+X = tf.placeholder(tf.float32, shape=[None, 784])
+Y = tf.placeholder(tf.float32, shape=[None, 10])
+def create_model():
+    def model(x):
+        with tf.variable_scope('basic_model_for_mnist', reuse=False):
+            layer1 = tf.layers.dense(x, 256, activation=tf.nn.sigmoid, name='layer1')
+            layer2 = tf.layers.dense(layer1, 10, name='layer2')
+        return layer2
+    return model
+
+def loss_fn(pred, Y):
+    loss = tf.reduce_mean(tf.losses.softmax_cross_entropy(logits=pred, onehot_labels=Y))
+    return loss
+
+def evaluate(pred, Y):
+    accuracy = tf.reduce_mean(tf.cast(tf.equal(tf.argmax(pred,1), tf.argmax(Y, 1)), tf.float32))
+    return accuracy
+
+pred = create_model()(X)
+loss = loss_fn(pred, Y)
+
+optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate, epsilon=0.1)
+
+acc = evaluate(pred, Y)
+
+train = optimizer.minimize(loss)
+
+# training
+init = tf.global_variables_initializer()
+saver = tf.train.Saver()
+train_iterator = train_dataset.make_initializable_iterator()
+test_iterator = test_dataset.make_initializable_iterator()
+
+tr_x, tr_y = train_iterator.get_next()
+ts_x, ts_y = test_iterator.get_next()
+
+num_train_iter = train_x.shape[0] // batch_size
+num_test_iter = test_x.shape[0] // batch_size
+
+
+with tf.Session() as sess:
+    sess.run(init)
+    # restore variables
+    try:
+        saver.restore(sess, checkpoint_prefix+'.ckpt')
+        print("Restored Variables successfully")
+    except:
+        print("Failed Restoring Variables")
+    
+    
+    for epoch in range(training_epochs):
+        sess.run(train_iterator.initializer)
+        
+        avg_loss = 0
+        avg_train_acc = 0
+        avg_test_acc = 0
+        train_step = 0
+        test_step = 0
+        
+        for _ in range(num_train_iter):
+            x, y = sess.run([tr_x, tr_y])
+            _, step_loss, step_acc = sess.run([train, loss, acc], feed_dict={X:x, Y:y})
+            
+            avg_loss += step_loss
+            avg_train_acc += step_acc
+            train_step += 1
+        avg_loss = avg_loss / train_step
+        avg_train_acc = avg_train_acc / train_step
+        
+        print("{}# epoch:".format(epoch+1))
+        print("train data:")
+        print("\t loss:{} \t accuracy:{}".format(avg_loss, avg_train_acc))
+        
+        if epoch%10 == 0:
+            sess.run(test_iterator.initializer)
+            for _ in range(num_test_iter):
+                x, y = sess.run([ts_x, ts_y])
+                step_acc = sess.run(acc, feed_dict={X:x, Y:y})
+                test_step += 1
+                avg_test_acc += step_acc
+            avg_test_acc /= test_step
+            
+            print("test data:")
+            print("\t accuracy:{}".format(avg_test_acc))
+            saver.save(sess, checkpoint_prefix+".ckpt")
+```
 
 
 
-
-
+**When using session mode, not eager-execution mode, consider using customized data pipeline rather than high-level api tf.data.Dataset**
 
 
 
@@ -1123,9 +1563,15 @@ with tf.Session() as sess:
 
 
 
-
-
 #### XII. Advanced Tensorflow Topics
 
 ##### i. Ragged Tensor
+
+
+
+
+
+
+
+##### ii. @C++ 
 
