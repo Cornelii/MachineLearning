@@ -1501,6 +1501,10 @@ with tf.Session() as sess:
 
 ## VII. Keras in Tensorflow
 
+```python
+
+```
+
 
 
 
@@ -1511,8 +1515,49 @@ with tf.Session() as sess:
 
 ## VIII. CNN Basics
 
+Convolutional Neural Network (CNN) is nothing but network using colvolution operation with filters.
+
+![](https://upload.wikimedia.org/wikipedia/commons/1/1e/Convolutional_Neural_Network_NeuralNetworkFeatureLayers.gif)
 
 
+
+Basically, Convolutional Layer consists of 
+
+- input (**N** * a1 * a2 * a3... * C) 
+- filters (f1 *  f2 * f3... * C) * **M**
+- output (**N** * n1 * n2 * n3... * **M**)
+
+##### !Notice!
+
+* Input, which goes through convolutional layer, has other number of channel (number of filters) from before.
+
+
+
+##### Stride
+
+How much points would filters jump at each convolutional operation.
+
+
+
+##### Padding
+
+To make output to have same size as the input. surrounding the input by zeros.
+
+
+
+$$
+m= \frac{(n+2p)-f}{s}+1\\
+m = ((n+2p)-f)//2+1
+$$
+m: output size
+
+n: input size
+
+p: padding #
+
+f: filter size
+
+s: stride
 
 
 
@@ -1529,7 +1574,21 @@ with tf.Session() as sess:
 
 
 
+
+
+
+
+
+
 #### ii. by using keras in tf
+
+
+
+
+
+
+
+
 
 
 
