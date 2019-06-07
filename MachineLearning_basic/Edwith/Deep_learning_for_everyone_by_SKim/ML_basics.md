@@ -1501,10 +1501,6 @@ with tf.Session() as sess:
 
 ## VII. Keras in Tensorflow
 
-```python
-
-```
-
 
 
 
@@ -1561,6 +1557,14 @@ s: stride
 
 
 
+##### number of weight in a Convolutional layer (conv2D)
+
+$$
+\text{Number of weights}=\text{filter width } * \text{filter hight} * \text{channel} * \text{number of filters}
+$$
+
+
+
 
 
 
@@ -1568,7 +1572,7 @@ s: stride
 
 
 
-#### i. by using tensorflow
+#### i. by using session mode
 
 
 
@@ -1580,7 +1584,13 @@ s: stride
 
 
 
-#### ii. by using keras in tf
+
+
+#### ii. by using eager-execution mode
+
+
+
+
 
 
 
@@ -1614,7 +1624,33 @@ s: stride
 
 
 
-#### ii. Word sentiment Classification
+
+
+
+
+
+
+
+
+
+
+#### ii. Word sentiment Classification (many-to-one model)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
