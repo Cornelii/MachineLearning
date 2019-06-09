@@ -1009,7 +1009,7 @@ The `tf.train.Saver` class provides methods to save and restore models.
 **Save Variables**
 
 ```python
-saver = tf.train.Saver()
+saver = tf.train.Saver(#var_list)
 
 with tf.Session() as sess:
     sess.run(init_op)
