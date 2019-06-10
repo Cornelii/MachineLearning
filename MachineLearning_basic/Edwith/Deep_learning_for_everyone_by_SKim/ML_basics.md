@@ -1056,6 +1056,11 @@ with tf.Sessions() as sess:
 
 #### vii. checkpoint and savedmodel
 
+```python
+checkpoint = tf.train.Checkpoint(model=model, optimizer=optimizer, ...)
+status = checkpoint.restore(tf.train.latest_checkpoints(checkpoint_dir))
+status.initialize_or_restore(sess) # If it is eager-execution mode, sess is not necessary
+```
 
 
 
@@ -1501,9 +1506,215 @@ with tf.Session() as sess:
 
 ## VII. Keras in Tensorflow
 
+#### Common (session-mode)
+
+```python
+import tensorflow as tf
+from tensorflow import keras
+from tensorflow.keras.utils import to_categorical
+
+import numpy as np
+import matplotlib.pyplot as plt
+import os
+
+##import tensorflow.contrib.eager as tfe
+##tf.enable_eager_execution()
+
+
+# HyperParameters
+learning_rate = 0.001
+training_epochs = 21
+batch_size = 100
+
+# Checkpoint dir
+cur_dir = os.getcwd()
+ckpt_dir_name = 'checkpoints'
+model_dir_name = 'mnist_keras_session'
+
+checkpoint_dir = os.path.join(cur_dir, ckpt_dir_name, model_dir_name)
+os.makedirs(checkpoint_dir, exist_ok=True)
+checkpoint_prefix = os.path.join(checkpoint_dir, model_dir_name)
+
+## TensorBoard
+log_dir = os.path.join(cur_dir, 'tensorboard', model_dir_name)
+os.makedirs(log_dir, exist_ok=True)
+
+
+# MNIST data
+mnist = keras.datasets.mnist
+
+(train_x, train_y), (test_x, test_y) = mnist.load_data()
+print(train_x.shape, train_y.shape, test_x.shape, test_y.shape)
+
+# dataset
+train_x = train_x.astype(np.float32) / 255
+test_x = test_x.astype(np.float32) / 255
+
+train_x = np.reshape(train_x, [-1,28*28])
+test_x = np.reshape(test_x, [-1,28*28])
+
+train_y = to_categorical(train_y, 10) ## one-hot encoding
+test_y = to_categorical(test_y,10)
+
+# tf.data.Dataset
+
+train_dataset = tf.data.Dataset.from_tensor_slices((train_x, train_y)).shuffle(buffer_size=70000).batch(batch_size)
+test_dataset = tf.data.Dataset.from_tensor_slices((test_x, test_y)).batch(batch_size)
+
+print(train_x.shape, train_y.shape, test_x.shape, test_y.shape)
+
+# To get ready for using dataset.
+init = tf.global_variables_initializer()
+num_train_data = train_x.shape[0]
+num_test_data = test_x.shape[0]
+
+train_iterator = train_dataset.make_initializable_iterator()
+test_iterator = test_dataset.make_initializable_iterator()
+
+tr_x, tr_y = train_iterator.get_next()
+ts_x, ts_y = test_iterator.get_next()
+
+
+# loss function, metric, and placeholders
+def loss_fn(model, x, labels):
+    logits = model(x)
+    loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(logits=logits, labels=labels))
+    return loss
+
+def evaluate(model, x, labels):
+    logits = model(x)
+    correct_pred = tf.equal(tf.argmax(logits,1), tf.argmax(labels,1))
+    acc = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
+    return acc
+
+X = tf.placeholder(tf.float32, shape=[None, 784])
+Y = tf.placeholder(tf.float32, shape=[None, 10])
+
+
+#### Define Model ########
+## Sequential
+## Functional
+## Class-based
+##########################
+
+
+# Opimizer and checkpoints
+optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate, epsilon=0.01)
+checkpoint = tf.train.Checkpoint(model=model, optimizer=optimizer)
+
+# loss and metric
+loss = loss_fn(model, X, Y)
+
+simple_optm = optimizer.minimize(loss)
+
+tr_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
+grads_and_vars = optimizer.compute_gradients(loss, var_list = tr_vars)
+optm = optimizer.apply_gradients(grads_and_vars)
+
+accuracy = evaluate(model, X, Y)
+
+
+# training
+with tf.Session() as sess:
+    
+    status=checkpoint.restore(tf.train.latest_checkpoint(checkpoint_dir))
+    status.initialize_or_restore(sess)
+
+
+    for epoch in range(training_epochs):
+        avg_loss = 0
+        avg_train_acc = 0
+        avg_test_acc = 0
+        train_step = 0
+        test_step = 0
+
+        sess.run(train_iterator.initializer)
+        for _ in range(num_train_data//batch_size):
+            train_input, train_label = sess.run([tr_x, tr_y])
+            step_loss, step_accuracy, _ = sess.run([loss, accuracy, optm], feed_dict={X:train_input, Y: train_label})
+            avg_loss += step_loss
+            avg_train_acc += step_accuracy
+            train_step += 1
+        avg_loss /= train_step
+        avg_train_acc /= train_step
+        
+        print(f"#EPOCH: {epoch+1}")
+        print(f"train_avg_loss:{avg_loss}\ttrain_avg_accuracy:{avg_train_acc}")
+        
+        if epoch%5 == 0:
+            sess.run(test_iterator.initializer)
+            for _ in range(num_test_data//batch_size):
+                test_x, test_y = sess.run([ts_x, ts_y])
+                step_accuracy = sess.run(accuracy, feed_dict={X:test_x, Y:test_y})
+                avg_test_acc += step_accuracy
+                test_step += 1 
+            avg_test_acc /= test_step
+        
+            print(f"test_avg_accuracy:{avg_test_acc}")
+            
+            checkpoint.save(file_prefix=checkpoint_prefix)
+    
+```
 
 
 
+#### 1. Sequential
+
+```python
+def create_model():
+    model = keras.Sequential()
+    model.add(keras.layers.Dense(256, activation=tf.nn.relu, input_shape=(784,)))  
+    ## input_shape at first layer appended to Sequantial
+    model.add(keras.layers.Dense(10))
+    return model
+
+model = create_model()
+model.summary()
+```
+
+
+
+#### 2. Functional Model
+
+```python
+def create_model_func():
+    with tf.variable_scope('functional', reuse=False):
+        inputs =  keras.Input(shape=(784,)) ## keras.Input needed (argument => tuple)
+        fc_layer1 = keras.layers.Dense(256, activation = tf.nn.relu)(inputs)
+        logits = keras.layers.Dense(10)(fc_layer1)
+        return keras.Model(inputs=inputs, outputs=logits)
+
+model_func = create_model_func()
+model_func.summary()
+```
+
+
+
+#### 3. Class_based Model
+
+```python
+class ClassModel(keras.Model):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.fc_layer1 = keras.layers.Dense(256, activation='relu')
+        self.logits = keras.layers.Dense(10)
+        
+    def call(self, inputs):
+        net = self.fc_layer1(inputs)
+        net = self.logits(net)
+        return net
+        
+#with tf.variable_scope('class_based'): # Variable scope does not work
+model_class = ClassModel()
+
+optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate, epsilon=0.01)
+checkpoint = tf.train.Checkpoint(model_class=model_class, optimizer=optimizer)
+
+loss_class = loss_fn(model_class, X, Y)
+
+# when model is set to be used, input tensor shape is automatically determined.
+model_class.summary()
+```
 
 
 
@@ -1574,11 +1785,167 @@ $$
 
 #### i. by using session mode
 
+```python
+import tensorflow as tf
+from tensorflow import keras
+from tensorflow.keras.utils import to_categorical
+
+import numpy as np
+import os
+import matplotlib.pyplot as plt
+
+learning_rate = 0.001
+training_epochs = 6
+batch_size = 50
+
+cur_dir = os.getcwd()
+ckpt_dir_name = 'checkpoints'
+model_dir_name = 'cnn_session_mode'
+
+checkpoint_dir = os.path.join(cur_dir, ckpt_dir_name, model_dir_name)
+os.makedirs(checkpoint_dir, exist_ok=True)
+checkpoint_path = os.path.join(checkpoint_dir, model_dir_name+'.ckpt')
 
 
+mnist = keras.datasets.mnist
+(train_x, train_y), (test_x, test_y) = mnist.load_data()
+print(train_x.shape, train_y.shape, test_x.shape, test_y.shape)
+
+train_x = train_x.astype(np.float32) / 255
+test_x = test_x.astype(np.float32) / 255
+
+train_x = np.expand_dims(train_x,3)
+test_x = np.expand_dims(test_x,3)
+
+train_y = to_categorical(train_y, 10)
+test_y = to_categorical(test_y, 10)
 
 
+train_dataset = tf.data.Dataset.from_tensor_slices((train_x, train_y)).shuffle(buffer_size=70000).batch(batch_size)
+test_dataset = tf.data.Dataset.from_tensor_slices((test_x, test_y)).batch(batch_size)
 
+num_train_data = train_x.shape[0]
+num_test_data = test_x.shape[0]
+
+print(train_x.shape, train_y.shape, test_x.shape, test_y.shape)
+
+
+# Traditional Model
+# Traditional Way
+class Model:
+    def __init__(self):
+        self.X = tf.placeholder(tf.float32, [None, 28, 28, 1])
+        self.Y = tf.placeholder(tf.float32, [None,10])
+        self.is_training = tf.placeholder(tf.bool, [])
+    
+    def create_model(self, reuse=False):
+        self.model = self._model(self.X, self.is_training, reuse=reuse)
+        
+    def _model(self, x, is_training=False, reuse=False):
+        with tf.variable_scope('model_layers', reuse=reuse):
+            conv1 = tf.contrib.layers.conv2d(x, 32, 3, padding='SAME', scope="conv1", activation_fn=tf.nn.relu)
+            # (n, 28, 28, 1) => (n, 28, 28,32)
+            pool1 = tf.contrib.layers.max_pool2d(conv1, 2)
+            # (n, 28, 28, 32) => (n, 14, 14,32)
+            
+            conv2 = tf.contrib.layers.conv2d(pool1, 64, 3, padding='SAME',scope='conv2', activation_fn=None)
+            # (n, 14, 14, 32) => (n, 14, 14, 64)
+            batch2 = tf.contrib.layers.batch_norm(conv2, is_training=is_training, scope="batch2", activation_fn=tf.nn.relu)
+            pool2 = tf.contrib.layers.max_pool2d(batch2, 2)
+            # (n, 14, 14, 64) => (n, 7, 7, 64)
+            
+            conv3 = tf.contrib.layers.conv2d(pool2, 128, 3, padding='SAME', scope='conv3', activation_fn=tf.nn.relu)
+            # (n, 7, 7, 64) => (n, 7, 7, 128)
+            flatten = tf.contrib.layers.flatten(conv3, scope='flatten')
+            flatten = tf.contrib.layers.dropout(flatten, keep_prob=0.7, is_training=is_training)
+            
+            # fully-connected-layer
+            fc_layer1 = tf.contrib.layers.fully_connected(flatten, 256, activation_fn=None, scope='fc_layer1')
+            batch4 = tf.contrib.layers.batch_norm(fc_layer1, is_training=is_training, scope='batch4', activation_fn=tf.nn.relu)
+            batch4 = tf.contrib.layers.dropout(batch4, keep_prob=0.7, is_training=is_training)
+            
+            output = tf.contrib.layers.fully_connected(batch4, 10, activation_fn=None, scope='output_layer')
+            
+            return output
+        
+        
+cnn = Model()
+cnn.create_model()
+
+loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(logits=cnn.model, labels= cnn.Y))
+
+pred = tf.equal(tf.argmax(cnn.model,1), tf.argmax(cnn.Y, 1))
+acc = tf.reduce_mean(tf.cast(pred, tf.float32))
+
+optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate, epsilon=0.01)
+
+var_list=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='model_layers')
+
+grads_and_vars = optimizer.compute_gradients(loss, var_list = var_list)
+train = optimizer.apply_gradients(grads_and_vars)
+
+
+saver = tf.train.Saver(var_list)
+
+
+init = tf.global_variables_initializer()
+num_train_data = train_x.shape[0]
+num_test_data = test_x.shape[0]
+
+train_iterator = train_dataset.make_initializable_iterator()
+test_iterator = test_dataset.make_initializable_iterator()
+
+tr_x, tr_y = train_iterator.get_next()
+ts_x, ts_y = test_iterator.get_next()
+
+# Training
+with tf.Session() as sess:
+    
+    try:
+        saver.restore(sess, checkpoint_path)
+        print('Variables are succesfully resotored')
+    except:
+        sess.run(init)
+        print('Failed to resotre variables from checkpoints')
+        
+    for epoch in range(training_epochs):
+        avg_loss = 0
+        avg_train_acc = 0
+        avg_test_acc = 0
+        train_step = 0
+        test_step = 0
+        
+        
+        # training set
+        sess.run(train_iterator.initializer)
+        for _ in range(num_train_data//batch_size):
+            train_inputs, train_labels = sess.run([tr_x, tr_y])
+            feed_dict={cnn.X:train_inputs, cnn.Y: train_labels, cnn.is_training:True}
+            step_loss, step_acc, _ = sess.run([loss, acc, train], feed_dict=feed_dict)
+            avg_loss += step_loss
+            avg_train_acc += step_acc
+            train_step += 1
+        avg_loss /= train_step
+        avg_train_acc /= train_step
+            
+        print("{}th Epoch".format(epoch+1))
+        print("train_avg_loss: {}\t train_avg_acc: {}".format(avg_loss, avg_train_acc))
+        
+        if (epoch+1)%5 == 0:
+            # test_set
+            sess.run(test_iterator.initializer)
+            for _ in range(num_test_data//batch_size):
+                test_inputs, test_labels = sess.run([ts_x, ts_y])
+                step_acc = sess.run(acc, feed_dict={
+                    cnn.X:test_inputs, 
+                    cnn.Y:test_labels,
+                    cnn.is_training:False})
+                avg_test_acc += step_acc
+                test_step += 1
+            avg_test_acc /= test_step
+            print('test_avg_acc: {}'.format(avg_test_acc))
+            saver.save(sess, checkpoint_path)
+```
 
 
 
@@ -1588,19 +1955,168 @@ $$
 
 #### ii. by using eager-execution mode
 
+```python
+
+# import tensorflow as tf
+from tensorflow import keras
+from tensorflow.keras.utils import to_categorical
+import numpy as np
+import os 
+import matplotlib.pyplot as plt
+
+tf.enable_eager_execution()
+
+# Hyper Parameters
+learning_rate = 0.01
+training_epochs = 6
+batch_size = 50
+
+
+# Checkpoint
+cur_dir = os.getcwd()
+model_dir_name = 'cnn_eager_mode'
+
+checkpoint_dir = os.path.join(cur_dir, 'checkpoints', model_dir_name)
+os.makedirs(checkpoint_dir, exist_ok=True)
+
+checkpoint_prefix = os.path.join(checkpoint_dir, model_dir_name)
+
+
+# data preprocessing
+mnist = keras.datasets.mnist
+(train_x, train_y), (test_x, test_y) = mnist.load_data()
+print(train_x.shape, train_y.shape, test_x.shape, test_y.shape)
+
+train_x = train_x.astype(np.float32) / 255
+test_x = test_x.astype(np.float32) / 255
+
+train_x = np.expand_dims(train_x, 3)
+test_x = np.expand_dims(test_x, 3)
+
+train_y = to_categorical(train_y, 10)
+test_y = to_categorical(test_y, 10)
+
+train_dataset = tf.data.Dataset.from_tensor_slices((train_x, train_y)).shuffle(buffer_size=70000).batch(batch_size)
+test_dataset = tf.data.Dataset.from_tensor_slices((test_x, test_y)).batch(batch_size)
+print('after preprocessing')
+print(train_x.shape, train_y.shape, test_x.shape, test_y.shape)
+
+# class-based model
+class CNNModel(keras.Model):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.conv1 = keras.layers.Conv2D(32, 3, padding='SAME', activation='relu')
+        self.pool1 = keras.layers.MaxPool2D(padding='SAME')
+        
+        self.conv2 = keras.layers.Conv2D(64, 3, padding='SAME', activation=None)
+        self.batch2 = keras.layers.BatchNormalization()
+        self.relu2 = keras.layers.ReLU()
+        self.pool2 = keras.layers.MaxPool2D(padding='SAME')
+        
+        self.conv3 = keras.layers.Conv2D(128, 3, padding='SAME', activation='relu')
+        self.flatten = keras.layers.Flatten()
+        self.dropout1 = keras.layers.Dropout(0.3)
+        
+        self.dense_fc = keras.layers.Dense(256, activation=None)
+        self.batch_fc = keras.layers.BatchNormalization()
+        self.relu_fc = keras.layers.ReLU()
+        self.dropout_fc = keras.layers.Dropout(0.3)
+        
+        self.output_layer = keras.layers.Dense(10, activation=None)
+        
+    def call(self, inputs, training=False): ## training for batch and dropout
+        net = self.conv1(inputs)
+        net = self.pool1(net)
+        
+        net = self.conv2(net)
+        net = self.batch2(net)
+        net = self.relu2(net)
+        net = self.pool2(net)
+        
+        net = self.conv3(net)
+        net = self.flatten(net)
+        net = self.dropout1(net)
+        net = self.dense_fc(net)
+        net = self.batch_fc(net)
+        net = self.relu_fc(net)
+        net = self.dropout_fc(net)
+        
+        net = self.output_layer(net)
+        return net
+
+    
+model = CNNModel()
+
+# loss, gradient, and metric functions
+def loss_fn(model, x, labels):
+    logits = model(x, training=True)
+    loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(logits=logits, labels=labels))
+    return loss
+
+# GradientTape
+def grad(model, x, labels):
+    with tf.GradientTape() as tape:
+        loss = loss_fn(model, x, labels)
+    return tape.gradient(loss, model.variables)
+
+optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate, epsilon=0.01)
+
+def metric(model, x, labels):
+    logits = model(x, training=False)
+    pred = tf.equal(tf.argmax(logits,1), tf.argmax(labels,1))
+    acc = tf.reduce_mean(tf.cast(pred, tf.float32))
+    return acc
+
+checkpoint = tf.train.Checkpoint(cnn=model)
+
+# Training
+num_train_data = train_x.shape[0]
+num_test_data = test_x.shape[0]
+
+
+status = checkpoint.restore(tf.train.latest_checkpoint(checkpoint_dir))
+status.initialize_or_restore()
+
+for epoch in range(training_epochs):
+    avg_loss = 0
+    avg_train_acc = 0
+    avg_test_acc = 0
+    train_step = 0
+    test_step = 0
+    
+    for images, labels in train_dataset:
+        grads = grad(model, images, labels)
+        optimizer.apply_gradients(zip(grads, model.variables))
+        loss = loss_fn(model, images, labels)
+        acc = metric(model, images, labels)
+        avg_loss += loss
+        avg_train_acc += acc
+        train_step += 1
+    avg_loss /= train_step
+    avg_train_acc /= train_step
+    print("{}th Epoch".format(epoch+1))
+    print("train_avg_loss: {}\t train_avg_acc: {}".format(avg_loss, avg_train_acc))
+    
+    if (epoch)%5 == 0:
+        for images, labels in test_dataset:
+            grads = grad(model, images, labels)
+            acc = metric(model, images, labels)
+            avg_test_acc += acc
+            test_step += 1
+        avg_test_acc /= test_step
+        print("test_avg_acc: {}".format(avg_test_acc))
+        checkpoint.save(file_prefix=checkpoint_prefix)
+```
 
 
 
+#### Main difference  between session and eager-execution mode
 
-
-
-
-
-
-
-
-
-
+1. For the eager-execution mode
+   - No placeholder
+   - functions, rather than operator (node) for the logits, metric, gradient, training
+   - use of GradientTape
+   - No need of initialization in dataset
 
 
 
@@ -1610,7 +2126,12 @@ $$
 
 
 
-
+1. Image and Vedio Compression
+2. Image Classification with bound box, and segmentation.
+3. Iamge generation (GAN)
+4. language model
+5. style transfer (GAN)
+6. etc...
 
 
 
@@ -1621,6 +2142,19 @@ $$
 ## XI. RNN basics
 
 #### i. concept
+
+Recurrent Nueral Network (RNN)
+
+![](./imgs/rnn.png)
+
+
+
+At every steps, the same weights are used repeatedly.
+
+It has several forms, in which many models are stemmed out, with respects to numbers of inputs and outputs.
+
+- many to one
+- many to many
 
 
 
