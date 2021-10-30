@@ -49,27 +49,102 @@ def numerical_gradient(f, x):
     return (f(x+h) - f(x-h)) / (2*h)
 
 
+class Relu:
+
+    def __init__(self):
+        pass
+
+    def forward(self, x):
+        pass
+
+    def backward(self, dout):
+        pass
+
+
+class Sigmoid:
+
+    def __init__(self):
+        pass
+
+    def forward(self, x):
+        pass
+
+    def backward(self, dout):
+        pass
+
+
 class Dense:
 
-    def __init__(self, num_input, num_output, activation_layer=sigmoid):
+    def __init__(self, num_input, num_output, activation_layer=None):
         self.x_len = num_input
         self.y_len = num_output
         self.W = np.ones([num_input, num_output], np.float64)
         self.B = np.zeros([1, num_output], np.float64)
-        self.activation_layer = activation_layer
+        if activation_layer:
+            if activation_layer == "sigmoid":
+                self.activation_layer = Sigmoid()
+            elif activation_layer == "relu":
+                self.activation_layer = Relu()
+            else:
+                raise Exception("Undefined Activation Function!")
+        else:
+            self.activation_layer = None
         self.dW = np.zeros_like(self.W) # initialization necessary
         self.dB = np.zeros_like(self.B)
+        self.x = None
 
         # initialization
         # normal distribution
     def forward(self, x):
+        self.x = x
         y = np.dot(x, self.W) + self.B
-        return self.activation_layer(y)
+        if self.activation_layer:
+            y = self.activation_layer.forward(y)
+        return y
 
-    def backward(self, y):
+    def backward(self, dout):
+        if self.activation_layer:
+            dout = self.activation_layer.backward(dout)
+
+        self.dW = np.dot(self.x.T, dout)
+        self.dB = np.sum(dout, axis=1)
+
+        return np.dot(dout, self.W.T)
+
+
+class Soft_Max_With_Loss:
+
+    def __init__(self):
         pass
 
-    def get_gradients(self, y):
+    def forward(self, x, t):
+        pass
+
+    def backward(self, dout):
+        pass
+
+
+class Normalization_Layer:
+
+    def __init__(self):
+        pass
+
+    def forward(self, x):
+        pass
+
+    def backward(self, dout):
+        pass
+
+
+class Drop_Out:
+
+    def __init__(self):
+        pass
+
+    def forward(self, x):
+        pass
+
+    def backward(self, dout):
         pass
 
 
